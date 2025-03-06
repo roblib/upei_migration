@@ -35,7 +35,7 @@ class ImportUtilities:
         with open(csv_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                command = f"update {table} set node_id = '{row['ID']}' where pid = '{row['PID']}'"
+                command = f"update {table} set nid = '{row['ID']}' where pid = '{row['PID']}'"
                 cursor.execute(command)
         self.conn.commit()
 
@@ -122,9 +122,12 @@ class ImportUtilities:
             pids.append(row['pid'])
         return pids
 
-    # Utility function to prepare database selections for workbenchl
-    def get_worksheet_details(self, table, content_model):
-        command = f"Select * from {table} where content_model = 'islandora:{content_model}'"
+    # Utility function to prepare database selections for workbench
+    def get_worksheet_details(self, content_model=None):
+        command = f"Select * from {self.namespace}"
+        if content_model is not None:
+            command = f"{command} where content_model = '{content_model}'"
+
         cursor = self.conn.cursor()
         details = []
         for row in cursor.execute(command):
@@ -146,23 +149,28 @@ class ImportUtilities:
             'sequence': 'field_weight',
         }
         content_map = {
-            'islandora:collectionCModel': 'collection',
-            'islandora:sp_large_image_cmodel': 'image',
-            'islandora:sp-audioCModel': 'audio',
-            'islandora:pageCModel': 'page',
+            'islandora:collectionCModel': 'Collection',
+            'islandora:sp_large_image_cmodel': 'Image',
+            'islandora:sp-audioCModel': 'Audio',
+            'islandora:pageCModel': 'Page',
             'islandora:bookCModel': 'Paged Content',
             'islandora:compoundCModel': 'Compound Object',
             'islandora:sp_pdf': 'Digital Document',
-            'islandora:sp_basic_image': 'image',
-            'islandora:newspaperCModel': 'newspaper',
+            'islandora:sp_basic_image': 'Image',
+            'islandora:newspaperCModel': 'Newspaper',
             'islandora:newspaperIssueCModel': 'Publication Issue',
-            'islandora:newspaperPageCModel': 'page',
+            'islandora:newspaperPageCModel': 'Page',
             'islandora:oralhistoriesCModel': 'Compound Object',
             'islandora:sp_videoCModel': 'Video',
             'ir:thesisCModel': 'Digital Document',
             'islandora:rootSerialCModel': 'Compound Object',
             'islandora:intermediateCModel': 'Compound Object',
-            'ir:citationCModel': 'Citation'
+            'ir:citationCModel': 'Citation',
+            'islandora:audioCModel|islandora:sp-audioCModel': 'Audio',
+            'islandora:slideCModel|islandora:sp_large_image_cmodel': 'Image',
+            'islandora:videoCModel|islandora:sp_videoCModel': 'Video',
+            'islandora:audioCModel': 'Audio',
+
         }
 
         cleaned_line = {}
@@ -240,9 +248,9 @@ class ImportUtilities:
         return result['node_id'] if result is not None else ''
 
     # Get key - value pairs from stored dublin core.
-    def get_dc_values(self, pid, table):
+    def get_dc_values(self, pid):
         cursor = self.conn.cursor()
-        result = cursor.execute(f"select dublin_core from {table} where pid = '{pid}'")
+        result = cursor.execute(f"select dublin_core from {self.namespace} where pid = '{pid}'")
         dc = result.fetchone()['dublin_core']
         root = ET.fromstring(dc)
         namespaces = {
@@ -255,8 +263,46 @@ class ImportUtilities:
             dc_vals[tag] = value
         return dc_vals
 
+    def add_title(self):
+        cursor = self.conn.cursor()
+        command = f"SELECT PID, title from {self.namespace} where title is null"
+        pids = cursor.execute(command).fetchall()
+        for pid in pids:
+            dc = self.get_dc_values(pid['PID'])
+            query = f"UPDATE {self.namespace} SET title = ? WHERE pid = ?"
+            values = (dc.get('title'), pid['PID'])
+            cursor.execute(query, values)
+        self.conn.commit()
+
+
+    def get_relationships(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT pid, nid FROM ivoices")
+        pairs = cursor.fetchall()  # Fetch all rows
+
+        relationships = []
+
+        for pid, nid in pairs:
+            if not pid:
+                continue
+            cursor.execute("SELECT collection_pid FROM ivoices WHERE pid = ?", (pid,))
+            collection_pid = cursor.fetchone()
+
+            if collection_pid:  # Ensure there is a valid collection_pid
+                collection_pid = collection_pid[0]  # Extract the value
+
+                cursor.execute("SELECT nid FROM ivoices WHERE pid = ?", (collection_pid,))
+                nid_result = cursor.fetchone()
+
+                if nid_result:  # Ensure a valid nid is found
+                    relationships.append({
+                        'node_id': nid,
+                        'member_of': nid_result[0]  # Extract nid value
+                    })
+
+        return relationships
+
 
 if __name__ == '__main__':
-    MU = ImportUtilities()
-
-    MU.add_node_ids('msvu', 'inputs/nid-pid.csv')
+    MU = ImportUtilities('ivoices')
+    MU.add_node_ids('ivoices', 'inputs/ivoice-nid-pid.csv')

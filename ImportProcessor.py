@@ -27,7 +27,7 @@ class ImportProcessor:
             'islandora:newspaperIssueCModel': ['OBJ', 'PDF'],
             'islandora:sp-audioCModel': ['OBJ'],
         }
-        self.iu = IU.ImportUtilities()
+        self.iu = IU.ImportUtilities(namespace)
         self.ms = IS.ImportServerUtilities(namespace)
         self.namespace = namespace
         self.export_dir = '/opt/islandora/upei_migration/export'
@@ -95,24 +95,49 @@ class ImportProcessor:
                 writer.writerow(row)
 
     # Prepares worksheets for workbench ingest.
-    def prepare_worksheet(self, content_model, output_file):
-        details = self.iu.get_worksheet_details(self.namespace, content_model)
-        with open(output_file, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
-            writer.writeheader()
-            for detail in details:
-                mods = self.iu.extract_from_mods(detail['field_pid'])
-                row = mods | detail
-                node_id = self.iu.get_nid_from_pid(self.namespace, row['field_member_of'])
-                row['id'] = row['field_pid']
-                dc = self.iu.get_dc_values(detail['field_pid'], self.namespace)
-                if 'title' not in row:
-                    row['title'] = dc['title']
-                if node_id:
-                    row['field_member_of'] = node_id
-                    writer.writerow(row)
+    def prepare_intial_ingest_worksheet(self, output_file):
+        details = self.iu.get_worksheet_details()
+        if not details:  # Check if details is None or empty
+            print("No worksheet details found.")
+            return
 
+        with open(output_file, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['id', 'title', 'field_pid', 'field_model'])
+            writer.writeheader()
+            id = 1
+
+            for detail in details:
+                if not detail or not detail.get('field_pid'):  # Add safer checks for detail and field_pid
+                    continue
+
+                # Fetch DC values and ensure it's valid
+                dc = self.iu.get_dc_values(detail['field_pid'])
+                if not dc or 'title' not in dc:  # Ensure dc is not None and has a 'title' key
+                    print(f"Warning: Missing DC values for PID {detail['field_pid']}")
+                    continue
+
+                # Prepare the row for CSV
+                row = {
+                    'id': id,
+                    'title': dc['title'],
+                    'field_pid': detail['field_pid'],
+                    'field_model': detail.get('field_model', 'Unknown')  # Use .get() with fallback for safety
+                }
+                writer.writerow(row)
+                id += 1
+    def prepare_relationship_worksheet(self, output_file):
+        realtionships = self.iu.get_relationships()
+        with open(output_file, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['node_id', 'field_member_of'])
+            writer.writeheader()
+            for relatiopship  in realtionships:
+                row = {}
+                row['node_id'] = relatiopship['node_id']
+                row['field_member_of'] = relatiopship['member_of']
+                writer.writerow(row)
+            writer.writeheader()
 
 
 
 MP = ImportProcessor('ivoices')
+MP.prepare_relationship_worksheet('ivoices_relationships.csv')

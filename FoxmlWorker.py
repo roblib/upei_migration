@@ -132,5 +132,5 @@ class FWorker:
 
 
 if __name__ == '__main__':
-    FW = FWorker('inputs/sample_foxml.xml')
-    print(FW.get_dc())
+    FW = FWorker('assets/sample_fox.xml')
+    print(FW.get_rels_ext_values())
