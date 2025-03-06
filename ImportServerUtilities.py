@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Utility class for functions to be run on the server
 import csv
 import shutil
@@ -119,7 +121,7 @@ class ImportServerUtilities:
                         continue
                     relations = fw.get_rels_ext_values()
                     row = {}
-                    row['title'] = fw.get_dc_values()[0]['title']
+                    row['title'] = fw.get_label()
                     row['pid'] = pid
                     for relation, value in relations.items():
                         if relation in self.iu.rels_map:

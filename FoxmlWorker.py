@@ -30,9 +30,13 @@ class FWorker:
     def get_pid(self):
         return self.root.attrib['PID']
 
-    # gets state
+    # Gets state
     def get_state(self):
         return self.properties['state']
+
+    # Gets label
+    def get_label(self):
+        return self.properties['label']
 
     # Gets all properties.
     def get_properties(self):
@@ -80,6 +84,9 @@ class FWorker:
         dc_nodes = self.root.findall(f'.//foxml:datastream[@ID="DC"]/foxml:datastreamVersion/foxml:xmlContent',
                                      namespaces=self.namespaces)
         dc_values = []
+        if not dc_nodes:
+            print(f"{self.get_pid()}: No DC values found.")
+            return dc_values
         dc_node = dc_nodes[-1]
         for child in dc_node.iter():
             if child.text is not None:
@@ -133,4 +140,4 @@ class FWorker:
 
 if __name__ == '__main__':
     FW = FWorker('assets/sample_fox.xml')
-    print(FW.get_rels_ext_values())
+
