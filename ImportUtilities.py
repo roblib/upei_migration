@@ -7,7 +7,7 @@ import urllib
 import urllib.parse
 import lxml.etree as ET
 import re
-
+import time
 import ModsTransformer as MT
 
 
@@ -18,18 +18,49 @@ class ImportUtilities:
         self.fields = ['PID', 'model', 'RELS_EXT_isMemberOfCollection_uri_ms', 'RELS_EXT_isPageOf_uri_ms']
         self.objectStore = '/usr/local/fedora/data/objectStore/'
         self.datastreamStore = '/usr/local/fedora/data/datastreamStore/'
-        self.rels_map = {'isMemberOfCollection': 'collection_pid',
-                         'isMemberOf': 'collection_pid',
-                         'hasModel': 'content_model',
-                         'isPageOf': 'page_of',
-                         'isSequenceNumber': 'sequence',
-                         'isConstituentOf': 'constituent_of',
-                         'mods': 'mods'
-                         }
-        self.mt = MT.ModsTransformer()
+        self.rels_map = {
+            'isMemberOfCollection': 'collection_pid',
+            'isMemberOf': 'collection_pid',
+            'hasModel': 'content_model',
+            'isPageOf': 'page_of',
+            'isSequenceNumber': 'sequence',
+            'isConstituentOf': 'constituent_of',
+            'mods': 'mods'
+        }
         self.namespace = namespace
 
+    @staticmethod
+    def human_readable_time(seconds):
+        """Convert seconds to a human-readable format (hours, minutes, seconds, milliseconds)."""
+        hours, remainder = divmod(seconds, 3600)
+        minutes, remainder = divmod(remainder, 60)
+        seconds, milliseconds = divmod(remainder, 1)
+        milliseconds = int(milliseconds * 1000)
+        parts = []
+        if hours:
+            parts.append(f"{int(hours)}h")
+        if minutes:
+            parts.append(f"{int(minutes)}m")
+        if seconds or (not parts and milliseconds == 0):  # Always show seconds if no larger unit exists
+            parts.append(f"{int(seconds)}s")
+        if milliseconds:
+            parts.append(f"{milliseconds}ms")
+        return " ".join(parts)
+
+    @staticmethod
+    def timeit(func):
+        """Decorator to measure the execution time of a function in a human-readable format."""
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"Function '{func.__name__}' executed in: {ImportUtilities.human_readable_time(elapsed_time)}")
+            return result
+        return wrapper
+
     # Adds node_id to table
+    @timeit
     def add_node_ids(self, table, csv_file):
         cursor = self.conn.cursor()
         with open(csv_file, newline='') as csvfile:
@@ -305,4 +336,4 @@ class ImportUtilities:
 
 if __name__ == '__main__':
     MU = ImportUtilities('ivoices')
-    MU.add_node_ids('ivoices', 'inputs/ivoice-nid-pid.csv')
+    MU.example_function()

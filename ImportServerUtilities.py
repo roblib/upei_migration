@@ -44,6 +44,7 @@ class ImportServerUtilities:
             print(f"No results found for {pid}")
 
     # Gets PIDS, filtered by namespace directly from objectStore
+    @IU.ImportUtilities.timeit
     def get_pids_from_objectstore(self, namespace=''):
         wildcard = '*/*'
         if namespace:
@@ -76,6 +77,7 @@ class ImportServerUtilities:
                 writer.writerow({'pid': pid, 'dublin_core': dc})
 
     #  Copies digital assets from dataStream store to staging directory
+    @IU.ImportUtilities.timeit
     def stage_files(self, content_model, datastreams=None):
         if datastreams is None:
             datastreams = ['OBJ']
@@ -98,6 +100,7 @@ class ImportServerUtilities:
                     print(f"Datastream not found for {nid}")
 
     # Builds record directly from objectStore
+    @IU.ImportUtilities.timeit
     def build_record_from_pids(self, namespace, output_file):
         pids = self.get_pids_from_objectstore(namespace)
         headers = [
