@@ -114,34 +114,36 @@ class ImportUtilities:
         return pids
 
     # Processes CSV returned from direct objectStore harvest
-    def process_full_institution(self, csv_file):
+    def process_full_institution(self, csv_file, table):
         cursor = self.conn.cursor()
         cursor.execute(f"""
-            CREATE TABLE if not exists {self.namespace}(
+            CREATE TABLE if not exists {table}(
+            title TEXT,
             pid TEXT PRIMARY KEY,
+            nid TEXT,
             content_model TEXT,
             collection_pid TEXT,
             page_of TEXT,
             sequence TEXT,
             constituent_of TEXT
+            dublin_core TEXT,
+            mods TEXT
             )""")
         self.conn.commit()
         with open(csv_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                collection = row['collection_pid']
-                page_of = row['page_of']
-                if not page_of:
-                    page_of = ' '
-                constituent_of = row['constituent_of']
-                if not constituent_of:
-                    constituent_of = ' '
                 try:
-                    command = f"INSERT OR REPLACE INTO  {self.namespace} VALUES('{row['pid']}', '{row['content_model']}', '{collection}','{page_of}', '{row['sequence']}','{constituent_of}')"
-                    cursor.execute(command)
-                except sqlite3.Error:
-                    print(command)
-                    print(row['pid'])
+                    command = f"""
+                        INSERT OR REPLACE INTO {table} 
+                        (title, pid, content_model, collection_pid, page_of, sequence, constituent_of) 
+                        VALUES (:title, :pid, :content_model, :collection_pid, :page_of, :sequence, :constituent_of)
+                    """
+                    cursor.execute(command, row)
+                except sqlite3.Error as e:
+                    print(f"SQLite Error: {e}")  # Print the error message
+                    print(f"SQL Command: {command}")  # Optional: Print the SQL command for debugging
+                    print(f"Parameters: {row}")
         self.conn.commit()
 
     # Get all collection contents within namespace
@@ -310,15 +312,12 @@ class ImportUtilities:
         cursor = self.conn.cursor()
         cursor.execute("SELECT pid, nid FROM ivoices")
         pairs = cursor.fetchall()  # Fetch all rows
-
         relationships = []
-
         for pid, nid in pairs:
             if not pid:
                 continue
             cursor.execute("SELECT collection_pid FROM ivoices WHERE pid = ?", (pid,))
             collection_pid = cursor.fetchone()
-
             if collection_pid:  # Ensure there is a valid collection_pid
                 collection_pid = collection_pid[0]  # Extract the value
 
@@ -335,5 +334,5 @@ class ImportUtilities:
 
 
 if __name__ == '__main__':
-    MU = ImportUtilities('ivoices')
-    MU.example_function()
+    MU = ImportUtilities('island_archives')
+    MU.process_full_institution('inputs/sdu_complete.csv', 'sdu')

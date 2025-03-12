@@ -134,9 +134,10 @@ class ImportServerUtilities:
                     print(f"FoXML file for {pid} is missing")
 
     # Adds all MODS records from datastreamStore to database.
-    def add_mods_to_database(self):
+    @IU.ImportUtilities.timeit
+    def add_mods_to_database(self, table):
         cursor = self.iu.conn.cursor()
-        pids = self.get_pids_from_objectstore(self.namespace)
+        pids = self.get_pids_from_objectstore(table)
         for pid in pids:
             foxml_file = self.iu.dereference(pid)
             foxml = f"{self.objectStore}/{foxml_file}"
@@ -152,9 +153,15 @@ class ImportServerUtilities:
                 mods_xml = fw.get_inline_mods()
             if mods_xml:
                 mods_xml = mods_xml.replace("'", "''")
-                command = f"""UPDATE {self.namespace} set mods = '{mods_xml}' where pid = '{pid}'"""
+                command = f"""UPDATE {table} set mods = '{mods_xml}' where pid = '{pid}'"""
                 cursor.execute(command)
         self.iu.conn.commit()
 
 
-MS = ImportServerUtilities('namespace')
+MS = ImportServerUtilities('island_archives')
+tables = ['bdh', 'craipe', 'sdu', 'herbarium', 'islemag', 'leg', 'herbarium', 'islemag', 'pwc', 'peimag', 'lmmi']
+for table in tables:
+    MS.add_mods_to_database(table)
+
+
+
