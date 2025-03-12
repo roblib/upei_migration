@@ -8,6 +8,7 @@ import urllib.parse
 import lxml.etree as ET
 import re
 import time
+import functools
 import ModsTransformer as MT
 
 
@@ -29,7 +30,6 @@ class ImportUtilities:
         }
         self.namespace = namespace
 
-    @staticmethod
     def human_readable_time(seconds):
         """Convert seconds to a human-readable format (hours, minutes, seconds, milliseconds)."""
         hours, remainder = divmod(seconds, 3600)
@@ -47,16 +47,18 @@ class ImportUtilities:
             parts.append(f"{milliseconds}ms")
         return " ".join(parts)
 
-    @staticmethod
     def timeit(func):
         """Decorator to measure the execution time of a function in a human-readable format."""
-        def wrapper(*args, **kwargs):
+
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):  # Ensure 'self' is passed for instance methods
             start_time = time.time()
-            result = func(*args, **kwargs)
+            result = func(self, *args, **kwargs)  # Call the method with 'self'
             end_time = time.time()
             elapsed_time = end_time - start_time
             print(f"Function '{func.__name__}' executed in: {ImportUtilities.human_readable_time(elapsed_time)}")
             return result
+
         return wrapper
 
     # Adds node_id to table
