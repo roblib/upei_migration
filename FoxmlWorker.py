@@ -103,7 +103,7 @@ class FWorker:
         re_nodes = self.root.findall(
             f'.//foxml:datastream[@ID="RELS-EXT"]/foxml:datastreamVersion/foxml:xmlContent/rdf:RDF',
             namespaces=self.namespaces)
-        if re_nodes is None:
+        if not re_nodes:
             return re_values
         re_node = re_nodes[-1]
         for child in re_node.iter():

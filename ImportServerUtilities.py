@@ -46,9 +46,10 @@ class ImportServerUtilities:
     # Gets PIDS, filtered by namespace directly from objectStore
     @IU.ImportUtilities.timeit
     def get_pids_from_objectstore(self, namespace=''):
+        namespace = f"info%3Afedora%2F{namespace}%3A"
         wildcard = '*/*'
         if namespace:
-            wildcard = f'*/*{namespace}*'
+            wildcard = f'*/{namespace}*'
         pids = []
         for p in Path(self.objectStore).rglob(wildcard):
             pid = unquote(p.name).replace('info:fedora/', '')
@@ -158,10 +159,8 @@ class ImportServerUtilities:
         self.iu.conn.commit()
 
 
-MS = ImportServerUtilities('island_archives')
-tables = ['bdh', 'craipe', 'sdu', 'herbarium', 'islemag', 'leg', 'herbarium', 'islemag', 'pwc', 'peimag', 'lmmi']
-for table in tables:
-    MS.add_mods_to_database(table)
+MS = ImportServerUtilities('climate')
+MS.build_record_from_pids('climate', 'outputs/climate_complete.csv')
 
 
 
