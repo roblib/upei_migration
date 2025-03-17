@@ -54,6 +54,7 @@ class ImportServerUtilities:
         for p in Path(self.objectStore).rglob(wildcard):
             pid = unquote(p.name).replace('info:fedora/', '')
             pids.append(pid)
+        print(f"Total number of PIDs found: {len(pids)}")
         return pids
 
     # Gets all dc datastream from objectstore
@@ -158,9 +159,10 @@ class ImportServerUtilities:
                 cursor.execute(command)
         self.iu.conn.commit()
 
+if __name__ == '__main__':
+    MS = ImportServerUtilities('ivoices')
+    MS.stage_files('')
 
-MS = ImportServerUtilities('climate')
-MS.build_record_from_pids('climate', 'outputs/climate_complete.csv')
 
 
 

@@ -278,7 +278,7 @@ class ImportUtilities:
     # Get node_id associated with pid.
     def get_pids_by_content_model(self, table, content_model):
         cursor = self.conn.cursor()
-        command = f"SELECT PID from {table} where CONTENT_MODEL = '{content_model}'"
+        command = f"SELECT PID from {table} where CONTENT_MODEL like '%{content_model}%'"
         result = cursor.execute(command).fetchone()
         return result['node_id'] if result is not None else ''
 
@@ -337,4 +337,3 @@ class ImportUtilities:
 
 if __name__ == '__main__':
     MU = ImportUtilities('island_archives')
-    MU.process_full_institution('inputs/sdu_complete.csv', 'sdu')
