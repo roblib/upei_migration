@@ -275,12 +275,15 @@ class ImportUtilities:
         result = cursor.execute(command).fetchone()
         return result['node_id'] if result is not None else ''
 
-    # Get node_id associated with pid.
+    # Get all pids with content model.
     def get_pids_by_content_model(self, table, content_model):
-        cursor = self.conn.cursor()
-        command = f"SELECT PID from {table} where CONTENT_MODEL like '%{content_model}%'"
-        result = cursor.execute(command).fetchone()
-        return result['node_id'] if result is not None else ''
+        cursor = self.conn.cursor()  # Manually create a cursor
+        try:
+            command = f"SELECT PID FROM {table} WHERE CONTENT_MODEL LIKE ?"
+            cursor.execute(command, (f"%{content_model}%",))
+            return [row[0] for row in cursor.fetchall()]  # Extracts all PID values
+        finally:
+            cursor.close()  # Ensures the cursor is always closed
 
     # Get key - value pairs from stored dublin core.
     def get_dc_values(self, pid):
@@ -336,4 +339,5 @@ class ImportUtilities:
 
 
 if __name__ == '__main__':
-    MU = ImportUtilities('island_archives')
+    MU = ImportUtilities('ivoices')
+    print(MU.get_pids_by_content_model('ivoices', 'audioCModel'))
