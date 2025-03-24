@@ -5,9 +5,10 @@ import csv
 import shutil
 from pathlib import Path
 from urllib.parse import unquote
-
+from typing import Optional, List
 import FoxmlWorker as FW
 import ImportUtilities as IU
+import json
 
 
 class ImportServerUtilities:
@@ -80,7 +81,7 @@ class ImportServerUtilities:
 
     #  Copies digital assets from dataStream store to staging directory
     @IU.ImportUtilities.timeit
-    def stage_files(self, content_model, datastreams=None):
+    def stage_files(self, content_model: str, datastreams: Optional[List] = None) -> None:
         if datastreams is None:
             datastreams = ['OBJ']
         pids = self.iu.get_pids_by_content_model(self.namespace, content_model)
@@ -159,9 +160,30 @@ class ImportServerUtilities:
                 cursor.execute(command)
         self.iu.conn.commit()
 
+    def get_dsids_with_count(self, namespace):
+        dsids = {}
+        pids = self.get_pids_from_objectstore('ivoices')
+        for pid in pids:
+            foxml_file = self.iu.dereference(pid)
+            foxml = f"{self.objectStore}/{foxml_file}"
+            if (foxml):
+                fw = FW.FWorker(foxml)
+                if fw.get_state() != 'Active':
+                    continue
+                datastreams  = fw.get_datastream_types()
+                for datastream,  in datastreams.keys():
+                    count = dsids.get(datastream)
+                    if count is not None:
+                        dsids[datastream] = count + 1
+                    else:
+                        datastreams[datastream] = 1
+        with open("dsid.json", "w") as file:
+            json.dump(dsids, file, indent=4)
+
+
 if __name__ == '__main__':
     MS = ImportServerUtilities('ivoices')
-    MS.stage_files('')
+    MS.get_dsids_with_count('ivoices')
 
 
 

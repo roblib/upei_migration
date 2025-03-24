@@ -140,4 +140,5 @@ class FWorker:
 
 if __name__ == '__main__':
     FW = FWorker('assets/sample_fox.xml')
+    print(FW.get_datastream_types())
 

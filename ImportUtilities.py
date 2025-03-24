@@ -337,7 +337,21 @@ class ImportUtilities:
 
         return relationships
 
+    import csv
+
+    def make_media_add_worksheet(self, input_file, output_file):
+        with open(output_file, mode="w", newline="") as out_file:  # Avoid shadowing `output_file`
+            writer = csv.DictWriter(out_file, fieldnames=['node_id', 'file'])
+            writer.writeheader()
+            with open(input_file, "r") as file:
+                for line in file:  # Iterate directly over lines
+                    row = {
+                        'node_id': line.split('_')[0],  # Get everything before the first underscore
+                        'file': line.strip()  # Remove trailing newlines
+                    }
+                    writer.writerow(row)
+
 
 if __name__ == '__main__':
     MU = ImportUtilities('ivoices')
-    print(MU.get_pids_by_content_model('ivoices', 'audioCModel'))
+    MU.make_media_add_worksheet('inputs/ivoice_file.txt', 'outputs/ivoice_media.csv')
