@@ -81,10 +81,13 @@ class ImportServerUtilities:
 
     #  Copies digital assets from dataStream store to staging directory
     @IU.ImportUtilities.timeit
-    def stage_files(self, content_model: str, datastreams: Optional[List] = None) -> None:
+    def stage_files(self, content_model: Optional[str] = None, datastreams: Optional[List] = None) -> None:
         if datastreams is None:
             datastreams = ['OBJ']
-        pids = self.iu.get_pids_by_content_model(self.namespace, content_model)
+        if content_model is None:
+            pids = self.get_pids_from_objectstore(self.namespace)
+        else:
+            pids = self.iu.get_pids_by_content_model(self.namespace, content_model)
         for pid in pids:
             nid = self.iu.get_nid_from_pid(self.namespace, pid)
             if nid == '':
@@ -183,8 +186,7 @@ class ImportServerUtilities:
 
 if __name__ == '__main__':
     MS = ImportServerUtilities('ivoices')
-    MS.get_dsids_with_count('ivoices')
-
+    MS.stage_files(datastreams=['MEDIATRACK'])
 
 
 
