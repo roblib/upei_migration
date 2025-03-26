@@ -174,12 +174,12 @@ class ImportServerUtilities:
                 if fw.get_state() != 'Active':
                     continue
                 datastreams  = fw.get_datastream_types()
-                for datastream,  in datastreams.keys():
+                for datastream  in datastreams.keys():
                     count = dsids.get(datastream)
                     if count is not None:
                         dsids[datastream] = count + 1
                     else:
-                        datastreams[datastream] = 1
+                        dsids[datastream] = 1
         with open("dsid.json", "w") as file:
             json.dump(dsids, file, indent=4)
 
