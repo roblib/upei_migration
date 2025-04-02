@@ -111,7 +111,6 @@ class ImportServerUtilities:
         with open(input_file, 'rb') as file:
             pids = pickle.load(file)
 
-
     # Builds record directly from objectStore
     @IU.ImportUtilities.timeit
     def build_record_from_pids(self, namespace, output_file):
@@ -180,8 +179,8 @@ class ImportServerUtilities:
                 fw = FW.FWorker(foxml)
                 if fw.get_state() != 'Active':
                     continue
-                datastreams  = fw.get_datastream_types()
-                for datastream  in datastreams.keys():
+                datastreams = fw.get_datastream_types()
+                for datastream in datastreams.keys():
                     count = dsids.get(datastream)
                     if count is not None:
                         dsids[datastream] = count + 1
@@ -212,6 +211,23 @@ class ImportServerUtilities:
                 mods = fw.get_inline_mods()
                 writer.writerow({'pid': pid, 'dublin_core': dc, 'pb_core': pb, 'mods': mods})
 
+    def stage_inline_pb(self):
+        cursor = self.iu.conn.cursor()
+        statement = f"select pid, nid from {self.namespace} where pbcore = ''"
+        for row in cursor.execute(statement):
+            pid = row['pid']
+            foxml_file = self.iu.dereference(pid)
+            foxml = f"{self.objectStore}/{foxml_file}"
+            try:
+                fw = FW.FWorker(foxml)
+            except:
+                print(f"No record found for {pid}")
+                continue
+            pb = fw.get_inline_pbcore()
+            if pb:
+                f = open(f"{row['nid']}_PBCORE.xml")
+                f.write(pb)
+                f.close()
 
 if __name__ == '__main__':
     MS = ImportServerUtilities('ivoices')
