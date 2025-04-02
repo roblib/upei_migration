@@ -9,6 +9,7 @@ import lxml.etree as ET
 import re
 import time
 import functools
+import pickle
 import ModsTransformer as MT
 
 
@@ -70,6 +71,17 @@ class ImportUtilities:
             for row in reader:
                 command = f"update {table} set nid = '{row['ID']}' where pid = '{row['PID']}'"
                 cursor.execute(command)
+        self.conn.commit()
+
+    # Adds node_id to table
+    @timeit
+    def add_dc_to_database(self, table, csv_file):
+        cursor = self.conn.cursor()
+        with open(csv_file, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                command = f"UPDATE {table} SET dublin_core = ? WHERE pid = ?"
+                cursor.execute(command, (row['dublin_core'], row['PID']))
         self.conn.commit()
 
     # Identifies object and datastream location within Fedora objectStores and datastreamStore.
@@ -149,13 +161,20 @@ class ImportUtilities:
         self.conn.commit()
 
     # Get all collection contents within namespace
-    def get_collection_content_pids(self, table, collection):
-        cursor = self.conn.cursor()
-        command = f"SELECT * from {table} where collection_pid = '{collection}'"
+    def get_collection_content_pids(self, table, collection, filename):
+        collection_pids = [collection]
+        parent_types = ['islandora:bookCModel', 'islandora:collectionCModel', ]
         pids = []
-        for row in cursor.execute(command):
-            pids.append(row['pid'])
-        return pids
+        cursor = self.conn.cursor()
+        while collection_pids:
+            collection = collection_pids.pop()
+            command = f"SELECT * from {table} where collection_pid = '{collection}'"
+            for row in cursor.execute(command):
+                if row['content_model'] in parent_types:
+                    collection_pids.append(row['pid'])
+                pids.append(row['pid'])
+        with open(filename, 'wb') as file:
+            pickle.dump(pids, file)
 
     # Utility function to prepare database selections for workbench
     def get_worksheet_details(self, content_model=None):
@@ -290,16 +309,17 @@ class ImportUtilities:
         cursor = self.conn.cursor()
         result = cursor.execute(f"select dublin_core from {self.namespace} where pid = '{pid}'")
         dc = result.fetchone()['dublin_core']
-        root = ET.fromstring(dc)
-        namespaces = {
-            'dc': 'http://purl.org/dc/elements/1.1/'
-        }
-        tags_and_values = [(elem.tag, elem.text) for elem in root.findall('.//dc:*', namespaces)]
-        dc_vals = {}
-        for tag, value in tags_and_values:
-            tag = re.sub(r"\{.*?\}", "", tag)
-            dc_vals[tag] = value
-        return dc_vals
+        if dc:
+            root = ET.fromstring(dc)
+            namespaces = {
+                'dc': 'http://purl.org/dc/elements/1.1/'
+            }
+            tags_and_values = [(elem.tag, elem.text) for elem in root.findall('.//dc:*', namespaces)]
+            dc_vals = {}
+            for tag, value in tags_and_values:
+                tag = re.sub(r"\{.*?\}", "", tag)
+                dc_vals[tag] = value
+            return dc_vals
 
     def add_title(self):
         cursor = self.conn.cursor()
@@ -313,20 +333,20 @@ class ImportUtilities:
         self.conn.commit()
 
 
-    def get_relationships(self):
+    def get_relationships(self, table):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT pid, nid FROM ivoices")
+        cursor.execute(f"SELECT pid, nid FROM {table}")
         pairs = cursor.fetchall()  # Fetch all rows
         relationships = []
         for pid, nid in pairs:
             if not pid:
                 continue
-            cursor.execute("SELECT collection_pid FROM ivoices WHERE pid = ?", (pid,))
+            cursor.execute(f"SELECT collection_pid FROM {table} WHERE pid = ?", (pid,))
             collection_pid = cursor.fetchone()
             if collection_pid:  # Ensure there is a valid collection_pid
                 collection_pid = collection_pid[0]  # Extract the value
 
-                cursor.execute("SELECT nid FROM ivoices WHERE pid = ?", (collection_pid,))
+                cursor.execute(f"SELECT nid FROM {table} WHERE pid = ?", (collection_pid,))
                 nid_result = cursor.fetchone()
 
                 if nid_result:  # Ensure a valid nid is found
@@ -341,7 +361,7 @@ class ImportUtilities:
 
     def make_media_add_worksheet(self, input_file, output_file):
         with open(output_file, mode="w", newline="") as out_file:  # Avoid shadowing `output_file`
-            writer = csv.DictWriter(out_file, fieldnames=['node_id', 'file'])
+            writer = csv.DictWriter(out_file, fieldnames=['node_id', 'file', 'media_use_tid'])
             writer.writeheader()
             with open(input_file, "r") as file:
                 for line in file:  # Iterate directly over lines
@@ -349,9 +369,15 @@ class ImportUtilities:
                         'node_id': line.split('_')[0],  # Get everything before the first underscore
                         'file': line.strip()  # Remove trailing newlines
                     }
+                    if 'MODS' in line:
+                        row['media_use_tid'] = 57
+                    if 'PBCORE' in line:
+                        row['media_use_tid'] = 56
                     writer.writerow(row)
 
 
 if __name__ == '__main__':
-    MU = ImportUtilities('ivoices')
-    MU.make_media_add_worksheet('inputs/ivoice_file.txt', 'outputs/ivoice_media.csv')
+    MU = ImportUtilities('upei')
+    print(MU.dereference('ivoices:ivoices20100403acass001'))
+
+

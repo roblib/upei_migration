@@ -9,6 +9,7 @@ from typing import Optional, List
 import FoxmlWorker as FW
 import ImportUtilities as IU
 import json
+import pickle
 
 
 class ImportServerUtilities:
@@ -105,6 +106,12 @@ class ImportServerUtilities:
                 else:
                     print(f"Datastream not found for {nid}")
 
+    @IU.ImportUtilities.timeit
+    def stage_files_from_list(self, input_file):
+        with open(input_file, 'rb') as file:
+            pids = pickle.load(file)
+
+
     # Builds record directly from objectStore
     @IU.ImportUtilities.timeit
     def build_record_from_pids(self, namespace, output_file):
@@ -183,10 +190,32 @@ class ImportServerUtilities:
         with open("dsid.json", "w") as file:
             json.dump(dsids, file, indent=4)
 
+    def get_inline_datastreams(self):
+        cursor = self.iu.conn.cursor()
+        statement = f"select pid from {self.namespace}"
+        headers = ['pid', 'dublin_core', 'pb_core', 'mods']
+        csv_file_path = f"{self.staging_dir}/{self.namespace}_inline.csv"
+        with open(csv_file_path, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=headers)  # Pass the file object here
+            writer.writeheader()
+            for row in cursor.execute(statement):
+                pid = row['pid']
+                foxml_file = self.iu.dereference(pid)
+                foxml = f"{self.objectStore}/{foxml_file}"
+                try:
+                    fw = FW.FWorker(foxml)
+                except:
+                    print(f"No record found for {pid}")
+                    continue
+                dc = fw.get_dc()
+                pb = fw.get_inline_pbcore()
+                mods = fw.get_inline_mods()
+                writer.writerow({'pid': pid, 'dublin_core': dc, 'pb_core': pb, 'mods': mods})
+
 
 if __name__ == '__main__':
     MS = ImportServerUtilities('ivoices')
-    MS.stage_files(datastreams=['MEDIATRACK'])
+    MS.get_inline_datastreams()
 
 
 

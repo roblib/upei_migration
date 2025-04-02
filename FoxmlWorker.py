@@ -22,7 +22,8 @@ class FWorker:
             'fedora': "info:fedora/fedora-system:def/relations-external#",
             'fedora-model': "info:fedora/fedora-system:def/model#",
             'islandora': "http://islandora.ca/ontology/relsext#",
-            'mods': 'http://www.loc.gov/mods/v3'
+            'mods': 'http://www.loc.gov/mods/v3',
+            'pbcore': 'http://www.pbcore.org/PBCore/PBCoreNamespace.html'
         }
         self.properties = self.get_properties()
 
@@ -76,8 +77,9 @@ class FWorker:
         dc_nodes = self.root.findall(
             f'.//foxml:datastream[@ID="DC"]/foxml:datastreamVersion/foxml:xmlContent/oai_dc:dc',
             namespaces=self.namespaces)
-        dc_node = dc_nodes[-1]
-        return ET.tostring(dc_node, encoding='unicode')
+        if dc_nodes:
+            dc_node = dc_nodes[-1]
+            return ET.tostring(dc_node, encoding='unicode')
 
     # Returns list of Dublin Core key/value pairs.  Allows for mulitples.
     def get_dc_values(self):
@@ -137,8 +139,24 @@ class FWorker:
 
         return retval
 
+    def get_inline_pbcore(self):
+        retval = ''
+        try:
+            pb_datastream = self.root.findall(
+                ".//foxml:datastream[@ID='PBCORE']/foxml:datastreamVersion/foxml:xmlContent/*",
+                self.namespaces
+            )
+            if not pb_datastream:
+                return retval
+            mods_node = pb_datastream[-1]
+            if mods_node is not None:
+                retval = ET.tostring(mods_node, encoding='unicode')
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        return retval
+
 
 if __name__ == '__main__':
-    FW = FWorker('assets/sample_fox.xml')
-    print(FW.get_datastream_types())
-
+    FW = FWorker('assets/foxml_inline.xml')
+    print(FW.get_inline_pbcore())

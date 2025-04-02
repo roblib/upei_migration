@@ -102,7 +102,7 @@ class ImportProcessor:
             return
 
         with open(output_file, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['id', 'title', 'field_pid', 'field_model'])
+            writer = csv.DictWriter(csvfile, fieldnames=['id', 'title', 'field_pid', 'field_model', 'file'])
             writer.writeheader()
             id = 1
 
@@ -126,12 +126,14 @@ class ImportProcessor:
                 writer.writerow(row)
                 id += 1
     def prepare_relationship_worksheet(self, output_file):
-        realtionships = self.iu.get_relationships()
+        realtionships = self.iu.get_relationships(self.namespace)
         with open(output_file, 'w', newline='') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=['node_id', 'field_member_of'])
             writer.writeheader()
             for relatiopship  in realtionships:
                 row = {}
+                if not relatiopship['node_id']:
+                    continue
                 row['node_id'] = relatiopship['node_id']
                 row['field_member_of'] = relatiopship['member_of']
                 writer.writerow(row)
@@ -139,5 +141,4 @@ class ImportProcessor:
 
 
 
-MP = ImportProcessor('ivoices')
-MP.prepare_relationship_worksheet('ivoices_relationships.csv')
+MP = ImportProcessor('upei')
