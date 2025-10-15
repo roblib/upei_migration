@@ -114,10 +114,16 @@ class FWorker:
                 cleaned = child.text.replace('info:fedora/', '').replace('\n', '')
                 text = ' '.join(cleaned.split())
                 if text:
-                    re_values[tag] = text
+                    if tag in re_values:
+                        re_values[tag] = re_values[tag] + '|' + text
+                    else:
+                        re_values[tag] = text
             resource = child.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')
             if resource:
-                re_values[tag] = resource.replace('info:fedora/', '')
+                if tag in re_values:
+                    re_values[tag] = re_values[tag] + '|' + resource.replace('info:fedora/', '')
+                else:
+                    re_values[tag] = resource.replace('info:fedora/', '')
         return re_values
 
     # Older Fedora objects may kep mods inline rather than ina separate file in the dataStore.
@@ -156,7 +162,24 @@ class FWorker:
 
         return retval
 
+    def get_inline_musicXML(self):
+        retval = ''
+        try:
+            mx_datastream = self.root.findall(
+                ".//foxml:datastream[@ID='MusicXML']/foxml:datastreamVersion/foxml:xmlContent/*",
+                self.namespaces
+            )
+            if not mx_datastream:
+                return retval
+            mx_node = mx_datastream[-1]
+            if mx_node is not None:
+                retval = ET.tostring(mx_node, encoding='unicode')
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        return retval
+
 
 if __name__ == '__main__':
-    FW = FWorker('assets/foxml_inline.xml')
-    print(FW.get_inline_pbcore())
+    FW = FWorker('assets/restricted.xml')
+    print(FW.get_rels_ext_values())

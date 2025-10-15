@@ -9,7 +9,6 @@ from typing import Optional, List
 import FoxmlWorker as FW
 import ImportUtilities as IU
 import json
-import pickle
 
 
 class ImportServerUtilities:
@@ -106,10 +105,25 @@ class ImportServerUtilities:
                 else:
                     print(f"Datastream not found for {nid}")
 
+    # Stages list of files.
     @IU.ImportUtilities.timeit
-    def stage_files_from_list(self, input_file):
-        with open(input_file, 'rb') as file:
-            pids = pickle.load(file)
+    def stage_files_from_list(self, datastreams, pids) -> None:
+        for pid in pids:
+            nid = self.iu.get_nid_from_pid(self.namespace, pid)
+            if nid == '':
+                continue
+            fw = self.get_foxml_from_pid(pid)
+            all_files = fw.get_file_data()
+            for datastream in datastreams:
+                if datastream in all_files:
+                    file_info = all_files[datastream]
+                    source = f"{self.datastreamStore}/{self.iu.dereference(file_info['filename'])}"
+                    extension = self.mimemap[file_info['mimetype']]
+                    destination = f"{self.staging_dir}/{nid}_{datastream}{extension}"
+                    shutil.copy(source, destination)
+                    print(f"{nid} {pid} {destination}")
+                else:
+                    print(f"Datastream not found for {nid}")
 
     # Builds record directly from objectStore
     @IU.ImportUtilities.timeit
@@ -225,13 +239,52 @@ class ImportServerUtilities:
                 continue
             pb = fw.get_inline_pbcore()
             if pb:
-                f = open(f"{row['nid']}_PBCORE.xml")
+                f = open(f"{self.staging_dir}/{row['nid']}_PBCORE.xml")
                 f.write(pb)
                 f.close()
 
+    def stage_inline_mxml(self):
+        cursor = self.iu.conn.cursor()
+        statement = f"select pid, nid from {self.namespace}"
+        for row in cursor.execute(statement):
+            pid = row['pid']
+            foxml_file = self.iu.dereference(pid)
+            foxml = f"{self.objectStore}/{foxml_file}"
+            try:
+                fw = FW.FWorker(foxml)
+            except:
+                print(f"No record found for {pid}")
+                continue
+            mx = fw.get_inline_pbcore()
+            if mx:
+                f = open(f"{self.staging_dir}/{row['nid']}_MusicXML.xml")
+                f.write(mx)
+                f.close()
+
+    @IU.ImportUtilities.timeit
+    def stage_bio(self):
+        pids = self.iu.get_pids_by_content_model(self.namespace, 'islandora:entityCModel')
+        headers = 'term_id', 'description'
+        csv_file_path = f"{self.staging_dir}/{self.namespace}_BIO.csv"
+        with open(csv_file_path, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=headers)  # Pass the file object here
+            writer.writeheader()
+            for pid in pids:
+                foxml_file = self.iu.dereference(pid)
+                foxml = f"{self.objectStore}/{foxml_file}"
+                try:
+                    fw = FW.FWorker(foxml)
+                except:
+                    print(f"No record found for {pid}")
+                    continue
+                all_files = fw.get_file_data()
+                if 'BIO' in all_files:
+                    file_info = all_files['BIO']
+                    source = f"{self.datastreamStore}/{self.iu.dereference(file_info['filename'])}"
+                    writer.writerow(
+                        {'term_id': fw.get_label(), 'description': Path(source).read_text(encoding="utf-8")})
+
+
 if __name__ == '__main__':
-    MS = ImportServerUtilities('ivoices')
-    MS.get_inline_datastreams()
-
-
-
+    MS = ImportServerUtilities('upei')
+    MS.stage_files(datastreams=['OBJ', 'TN', 'FULL_TEXT'])

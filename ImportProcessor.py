@@ -95,14 +95,15 @@ class ImportProcessor:
                 writer.writerow(row)
 
     # Prepares worksheets for workbench ingest.
-    def prepare_intial_ingest_worksheet(self, output_file):
+    def prepare_initial_ingest_worksheet(self, output_file):
         details = self.iu.get_worksheet_details()
         if not details:  # Check if details is None or empty
             print("No worksheet details found.")
             return
 
         with open(output_file, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['id', 'title', 'field_pid', 'field_model', 'file'])
+            writer = csv.DictWriter(csvfile,
+                                    fieldnames=['id', 'title', 'field_title', 'field_pid', 'field_model', 'file'])
             writer.writeheader()
             id = 1
 
@@ -120,25 +121,37 @@ class ImportProcessor:
                 row = {
                     'id': id,
                     'title': dc['title'],
+                    'field_title': dc['title'],
                     'field_pid': detail['field_pid'],
                     'field_model': detail.get('field_model', 'Unknown')  # Use .get() with fallback for safety
                 }
-                writer.writerow(row)
+                try:
+                    if 'web' in detail['field_pid']:
+                        writer.writerow(row)
+                except Exception as e:
+                    print(f"Failed to write row {row}: {e}")
                 id += 1
+
     def prepare_relationship_worksheet(self, output_file):
-        realtionships = self.iu.get_relationships(self.namespace)
+        relationships = self.iu.get_relationships(self.namespace)
         with open(output_file, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['node_id', 'field_member_of'])
+            writer = csv.DictWriter(csvfile, fieldnames=['node_id', 'title', 'field_member_of'])
             writer.writeheader()
-            for relatiopship  in realtionships:
+            for relationship in relationships:
                 row = {}
-                if not relatiopship['node_id']:
+                if not relationship['node_id']:
                     continue
-                row['node_id'] = relatiopship['node_id']
-                row['field_member_of'] = relatiopship['member_of']
+                row['node_id'] = relationship['node_id']
+                row['field_member_of'] = relationship['member_of']
                 writer.writerow(row)
-            writer.writeheader()
 
 
 
-MP = ImportProcessor('upei')
+
+
+    def full_server_prep(self):
+        self.ms.build_record_from_pids(self.namespace)
+
+
+MP = ImportProcessor('bdh')
+MP.prepare_relationship_worksheet('worksheets/new_relations.csv')

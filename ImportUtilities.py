@@ -5,6 +5,8 @@ import hashlib
 import sqlite3
 import urllib
 import urllib.parse
+from typing import Any
+
 import lxml.etree as ET
 import re
 import time
@@ -69,8 +71,8 @@ class ImportUtilities:
         with open(csv_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                command = f"update {table} set nid = '{row['ID']}' where pid = '{row['PID']}'"
-                cursor.execute(command)
+                command = f"UPDATE {table} SET nid = ? WHERE pid = ?"
+                cursor.execute(command, (row['ID'], row['PID']))
         self.conn.commit()
 
     # Adds node_id to table
@@ -80,8 +82,8 @@ class ImportUtilities:
         with open(csv_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                command = f"UPDATE {table} SET dublin_core = ? WHERE pid = ?"
-                cursor.execute(command, (row['dublin_core'], row['PID']))
+                command = f"UPDATE {table} SET dublin_core = ? WHERE pid = ? and dublin_core is NULL"
+                cursor.execute(command, (row['dublin_core'], row['pid']))
         self.conn.commit()
 
     # Identifies object and datastream location within Fedora objectStores and datastreamStore.
@@ -207,6 +209,7 @@ class ImportUtilities:
             'islandora:sp_large_image_cmodel': 'Image',
             'islandora:sp-audioCModel': 'Audio',
             'islandora:pageCModel': 'Page',
+            'islandora:bd_pageCModel': 'Page',
             'islandora:bookCModel': 'Paged Content',
             'islandora:compoundCModel': 'Compound Object',
             'islandora:sp_pdf': 'Digital Document',
@@ -234,8 +237,9 @@ class ImportUtilities:
                     value = ''
                 if value.strip():
                     cleaned_line[map[key]] = value
+        if 'field_model' in cleaned_line:
+            cleaned_line['field_model'] = content_map.get(cleaned_line['field_model'])
 
-        cleaned_line['field_model'] = content_map[cleaned_line['field_model']]
         return cleaned_line
 
     # Get all content models from map
@@ -290,9 +294,16 @@ class ImportUtilities:
     # Get node_id associated with pid.
     def get_nid_from_pid(self, table, pid):
         cursor = self.conn.cursor()
-        command = f"SELECT node_id from {table} where PID = '{pid}'"
+        command = f"SELECT nid from {table} where PID = '{pid}'"
         result = cursor.execute(command).fetchone()
-        return result['node_id'] if result is not None else ''
+        return result['nid'] if result is not None else ''
+
+    # Get pid associated with nid.
+    def get_pid_from_nid(self, table: object, nid: object) -> str | Any:
+        cursor = self.conn.cursor()
+        command = f"SELECT pid from {table} where nid = '{nid}'"
+        result = cursor.execute(command).fetchone()
+        return result['pid'] if result is not None else ''
 
     # Get all pids with content model.
     def get_pids_by_content_model(self, table, content_model):
@@ -332,42 +343,32 @@ class ImportUtilities:
             cursor.execute(query, values)
         self.conn.commit()
 
-
     def get_relationships(self, table):
         cursor = self.conn.cursor()
-        cursor.execute(f"SELECT pid, nid FROM {table}")
-        pairs = cursor.fetchall()  # Fetch all rows
-        relationships = []
-        for pid, nid in pairs:
-            if not pid:
-                continue
-            cursor.execute(f"SELECT collection_pid FROM {table} WHERE pid = ?", (pid,))
-            collection_pid = cursor.fetchone()
-            if collection_pid:  # Ensure there is a valid collection_pid
-                collection_pid = collection_pid[0]  # Extract the value
-
-                cursor.execute(f"SELECT nid FROM {table} WHERE pid = ?", (collection_pid,))
-                nid_result = cursor.fetchone()
-
-                if nid_result:  # Ensure a valid nid is found
-                    relationships.append({
-                        'node_id': nid,
-                        'member_of': nid_result[0]  # Extract nid value
-                    })
-
+        cursor.execute(f"""
+            SELECT child.nid, parent.nid, child.sequence, child.title
+            FROM {table} as child
+            JOIN {table} as parent
+            ON child.collection_pid = parent.pid
+        """)
+        rows = cursor.fetchall()
+        relationships = [
+            {'node_id': r[0], 'member_of': r[1], 'weight': r[2] if r[2] is not None else '', 'title': r[3]}
+            for r in rows
+        ]
         return relationships
 
     import csv
 
     def make_media_add_worksheet(self, input_file, output_file):
-        with open(output_file, mode="w", newline="") as out_file:  # Avoid shadowing `output_file`
+        with open(output_file, mode="w", newline="") as out_file:
             writer = csv.DictWriter(out_file, fieldnames=['node_id', 'file', 'media_use_tid'])
             writer.writeheader()
             with open(input_file, "r") as file:
-                for line in file:  # Iterate directly over lines
+                for line in file:
                     row = {
-                        'node_id': line.split('_')[0],  # Get everything before the first underscore
-                        'file': line.strip()  # Remove trailing newlines
+                        'node_id': line.split('_')[0],
+                        'file': line.strip()
                     }
                     if 'MODS' in line:
                         row['media_use_tid'] = 57
@@ -375,9 +376,75 @@ class ImportUtilities:
                         row['media_use_tid'] = 56
                     writer.writerow(row)
 
+    def make_archive_url_worksheet(self, output_file):
+        cursor = self.conn.cursor()
+        statement = f"select pid, nid from {self.namespace} where pid like '%batch%'"
+        cursor.execute(statement)
+        results = cursor.fetchall()
+        with open(output_file, mode="w", newline="") as out_file:
+            writer = csv.DictWriter(out_file, fieldnames=['node_id', 'field_archival_alias'])
+            writer.writeheader()
+            for result in results:
+                row = {}
+                row['node_id'] = result['nid']
+                row['field_archival_alias'] = f"islandora:{result['pid'][12:]}"
+                writer.writerow(row)
+    def fix_media(self, infile, outfile):
+        with open(infile, mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            pids = []
+
+            for row in reader:
+                nid = row['Media name'][:2]
+                pids.append(self.get_pid_from_nid('ivoices', nid))
+
+            print(pids)
+
+    def redwhite(self, infile, outfile):
+        with open(outfile, mode="w", newline="") as outfile:
+            writer = csv.DictWriter(outfile, fieldnames=['id','title','field_pid','field_model','field_weight','file'])
+            writer.writeheader()
+            with open(infile, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if row['field_pid'] == 'vre:redwhite' or 'vre:rw-batch' in row['field_pid']:
+                        writer.writerow(row)
+
+
+
+    def build_new_bdh(self, infile, outfile):
+        with open(outfile, mode="w", newline="") as outfile:
+            writer = csv.DictWriter(outfile, fieldnames=['node_id', 'field_member_of'])
+            writer.writeheader()
+            with open(infile, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    node_id = self.get_nid_from_pid('bdh', row['pid'])
+                    collection_pids = []
+                    collections = row['collections'].split('|')
+                    for collection in collections:
+                        collection_pids.append(self.get_nid_from_pid('bdh', collection))
+                    collection_string = '|'.join(collection_pids)
+                    new_row = {'node_id': node_id, 'field_member_of': collection_string}
+                    writer.writerow(new_row)
+
+    def prepare_restricted_worksheet(self, input_file, output_file):
+        pids = []
+        with open(input_file, "r") as f:
+            for line in f:
+                pids.append(line.strip())
+        with open(output_file, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['node_id', 'published'])
+            writer.writeheader()
+            for pid in pids:
+                row = {}
+                nid = self.get_nid_from_pid('bdh', pid)
+                if nid is not None:
+                    row['node_id'] = nid
+                    row['published'] = 0
+                    writer.writerow(row)
+
 
 if __name__ == '__main__':
-    MU = ImportUtilities('upei')
-    print(MU.dereference('ivoices:ivoices20100403acass001'))
-
-
+    MU = ImportUtilities('bdh')
+    MU.prepare_restricted_worksheet('assets/bdh_restricted_pids.csv', 'outputs/bdh_restricted_pids.csv')
